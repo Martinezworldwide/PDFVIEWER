@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>OCR-Ready PDF Viewer</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OCR-Ready PDF Viewer (Stable)</title>
   <style>
     body {
       background: #121212;
@@ -32,9 +32,6 @@
     button:hover {
       background: #555;
     }
-    #print-area {
-      display: none;
-    }
     #loading-bar {
       width: 80%;
       background: #555;
@@ -50,14 +47,6 @@
       width: 0%;
       transition: width 0.3s;
     }
-    @media print {
-      body * {
-        display: none;
-      }
-      #print-area {
-        display: block;
-      }
-    }
   </style>
 </head>
 <body>
@@ -67,22 +56,21 @@
     <button onclick="prevPage()">Prev</button>
     <span>Page: <span id="page_num">1</span> / <span id="page_count">--</span></span>
     <button onclick="nextPage()">Next</button>
-    <button onclick="printAll()">🖨️ Print PDF</button>
+    <button onclick="printPDF()">🖨️ Print PDF</button>
     <button onclick="downloadPDF()">⬇️ Download as PDF</button>
   </div>
   <canvas id="pdf-canvas"></canvas>
   <div id="loading-bar">
     <div id="loading-progress"></div>
   </div>
-  <div id="print-area"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
   <script>
     const fileInput = document.getElementById('file-input');
     const canvas = document.getElementById('pdf-canvas');
     const ctx = canvas.getContext('2d');
-    const printArea = document.getElementById('print-area');
     const loadingBar = document.getElementById('loading-bar');
     const loadingProgress = document.getElementById('loading-progress');
 
@@ -156,79 +144,89 @@
       queueRenderPage(pageNum);
     }
 
-    function printAll() {
+    function printPDF() {
       if (!pdfDoc) return;
 
-      printArea.innerHTML = '';
       loadingBar.style.display = 'block';
       loadingProgress.style.width = '0%';
-      const promises = [];
 
-      for (let i = 1; i <= pdfDoc.numPages; i++) {
-        promises.push(
-          pdfDoc.getPage(i).then(function(page) {
-            const viewport = page.getViewport({ scale: 1.5 });
-            const canvasPrint = document.createElement('canvas');
-            const context = canvasPrint.getContext('2d');
-            canvasPrint.width = viewport.width;
-            canvasPrint.height = viewport.height;
+      let pagesDone = 0;
 
-            return page.render({ canvasContext: context, viewport: viewport }).promise.then(() => {
-              const img = document.createElement('img');
-              img.src = canvasPrint.toDataURL('image/png');
-              img.style.width = '100%';
-              img.style.pageBreakAfter = 'always';
-              printArea.appendChild(img);
-              loadingProgress.style.width = `${(i / pdfDoc.numPages) * 100}%`;
-            });
-          })
-        );
+      function renderNext() {
+        if (pagesDone >= pdfDoc.numPages) {
+          loadingBar.style.display = 'none';
+          setTimeout(() => {
+            window.print();
+          }, 500);
+          return;
+        }
+
+        pdfDoc.getPage(pagesDone + 1).then(page => {
+          const viewport = page.getViewport({ scale: 1.5 });
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+          const renderContext = { canvasContext: ctx, viewport: viewport };
+          page.render(renderContext).promise.then(() => {
+            pagesDone++;
+            loadingProgress.style.width = (pagesDone / pdfDoc.numPages * 100) + '%';
+            setTimeout(renderNext, 100); // allow browser to breathe
+          });
+        });
       }
 
-      Promise.all(promises).then(() => {
-        loadingBar.style.display = 'none';
-        window.print();
-      });
+      renderNext();
     }
 
     function downloadPDF() {
       if (!pdfDoc) return;
 
-      printArea.innerHTML = '';
       loadingBar.style.display = 'block';
       loadingProgress.style.width = '0%';
-      const promises = [];
 
-      for (let i = 1; i <= pdfDoc.numPages; i++) {
-        promises.push(
-          pdfDoc.getPage(i).then(function(page) {
-            const viewport = page.getViewport({ scale: 1.5 });
-            const canvasPrint = document.createElement('canvas');
-            const context = canvasPrint.getContext('2d');
-            canvasPrint.width = viewport.width;
-            canvasPrint.height = viewport.height;
+      const worker = html2pdf().from('<div></div>').outputPdf('datauristring');
 
-            return page.render({ canvasContext: context, viewport: viewport }).promise.then(() => {
-              const img = document.createElement('img');
-              img.src = canvasPrint.toDataURL('image/png');
-              img.style.width = '100%';
-              img.style.pageBreakAfter = 'always';
-              printArea.appendChild(img);
-              loadingProgress.style.width = `${(i / pdfDoc.numPages) * 100}%`;
-            });
-          })
-        );
+      let pagesDone = 0;
+      let content = document.createElement('div');
+      content.style.width = "800px";
+
+      function renderNext() {
+        if (pagesDone >= pdfDoc.numPages) {
+          loadingBar.style.display = 'none';
+          html2pdf()
+            .from(content)
+            .set({
+              margin: 0,
+              filename: 'downloaded.pdf',
+              html2canvas: { scale: 2 },
+              jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+            })
+            .save();
+          return;
+        }
+
+        pdfDoc.getPage(pagesDone + 1).then(page => {
+          const viewport = page.getViewport({ scale: 1.5 });
+          const tempCanvas = document.createElement('canvas');
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCanvas.width = viewport.width;
+          tempCanvas.height = viewport.height;
+
+          page.render({ canvasContext: tempCtx, viewport: viewport }).promise.then(() => {
+            const img = document.createElement('img');
+            img.src = tempCanvas.toDataURL('image/png');
+            img.style.width = '100%';
+            img.style.pageBreakAfter = 'always';
+            content.appendChild(img);
+
+            pagesDone++;
+            loadingProgress.style.width = (pagesDone / pdfDoc.numPages * 100) + '%';
+
+            setTimeout(renderNext, 100); // allow browser to breathe
+          });
+        });
       }
 
-      Promise.all(promises).then(() => {
-        loadingBar.style.display = 'none';
-        html2pdf().from(printArea).set({
-          margin: 0,
-          filename: 'downloaded.pdf',
-          html2canvas: { scale: 2 },
-          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-        }).save();
-      });
+      renderNext();
     }
   </script>
 </body>
