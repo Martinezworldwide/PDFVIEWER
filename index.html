@@ -3,31 +3,36 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>PDF Viewer</title>
+  <title>Local PDF Viewer</title>
   <style>
     body {
-      margin: 0;
-      padding: 0;
-      background: #111;
+      background: #121212;
       color: white;
       font-family: sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
+      padding: 20px;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    input[type="file"] {
+      margin-bottom: 15px;
     }
     canvas {
-      border: 1px solid #555;
-      margin-top: 10px;
+      border: 1px solid #444;
+      margin: 10px 0;
     }
     .controls {
-      margin-top: 10px;
+      margin: 10px;
     }
     button {
-      padding: 6px 12px;
-      margin: 0 5px;
       background: #333;
       color: white;
       border: none;
+      padding: 6px 12px;
+      margin: 0 5px;
       cursor: pointer;
     }
     button:hover {
@@ -37,6 +42,7 @@
 </head>
 <body>
   <h1>PDF Viewer</h1>
+  <input type="file" id="file-input" accept=".pdf" />
   <div class="controls">
     <button onclick="prevPage()">Prev</button>
     <span>Page: <span id="page_num">1</span> / <span id="page_count">--</span></span>
@@ -46,15 +52,34 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <script>
-    const url = 'sample.pdf'; // Change to your PDF filename
+    const fileInput = document.getElementById('file-input');
+    const canvas = document.getElementById('pdf-canvas');
+    const ctx = canvas.getContext('2d');
 
-    let pdfDoc = null,
-        pageNum = 1,
-        pageRendering = false,
-        pageNumPending = null,
-        scale = 1.5,
-        canvas = document.getElementById('pdf-canvas'),
-        ctx = canvas.getContext('2d');
+    let pdfDoc = null;
+    let pageNum = 1;
+    let scale = 1.2;
+    let pageRendering = false;
+    let pageNumPending = null;
+
+    fileInput.addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file && file.type === 'application/pdf') {
+        const fileReader = new FileReader();
+        fileReader.onload = function() {
+          const typedarray = new Uint8Array(this.result);
+          pdfjsLib.getDocument(typedarray).promise.then(function(pdf) {
+            pdfDoc = pdf;
+            document.getElementById('page_count').textContent = pdf.numPages;
+            pageNum = 1;
+            renderPage(pageNum);
+          });
+        };
+        fileReader.readAsArrayBuffer(file);
+      } else {
+        alert("Please select a valid PDF file.");
+      }
+    });
 
     function renderPage(num) {
       pageRendering = true;
@@ -100,12 +125,7 @@
       pageNum--;
       queueRenderPage(pageNum);
     }
-
-    pdfjsLib.getDocument(url).promise.then(function(pdfDoc_) {
-      pdfDoc = pdfDoc_;
-      document.getElementById('page_count').textContent = pdfDoc.numPages;
-      renderPage(pageNum);
-    });
   </script>
 </body>
 </html>
+
