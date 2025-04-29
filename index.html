@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Local PDF Viewer</title>
+  <title>OCR-Ready PDF Viewer</title>
   <style>
     body {
       background: #121212;
@@ -13,12 +13,6 @@
       flex-direction: column;
       align-items: center;
       padding: 20px;
-    }
-    h1 {
-      margin-bottom: 10px;
-    }
-    input[type="file"] {
-      margin-bottom: 15px;
     }
     canvas {
       border: 1px solid #444;
@@ -38,23 +32,37 @@
     button:hover {
       background: #555;
     }
+    #print-area {
+      display: none;
+    }
+    @media print {
+      body * {
+        display: none;
+      }
+      #print-area {
+        display: block;
+      }
+    }
   </style>
 </head>
 <body>
-  <h1>PDF Viewer</h1>
+  <h1>PDF Viewer (OCR-Ready)</h1>
   <input type="file" id="file-input" accept=".pdf" />
   <div class="controls">
     <button onclick="prevPage()">Prev</button>
     <span>Page: <span id="page_num">1</span> / <span id="page_count">--</span></span>
     <button onclick="nextPage()">Next</button>
+    <button onclick="printAll()">🖨️ Print PDF</button>
   </div>
   <canvas id="pdf-canvas"></canvas>
+  <div id="print-area"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <script>
     const fileInput = document.getElementById('file-input');
     const canvas = document.getElementById('pdf-canvas');
     const ctx = canvas.getContext('2d');
+    const printArea = document.getElementById('print-area');
 
     let pdfDoc = null;
     let pageNum = 1;
@@ -124,6 +132,35 @@
       if (pageNum <= 1) return;
       pageNum--;
       queueRenderPage(pageNum);
+    }
+
+    function printAll() {
+      if (!pdfDoc) return;
+
+      printArea.innerHTML = '';
+      const promises = [];
+
+      for (let i = 1; i <= pdfDoc.numPages; i++) {
+        promises.push(pdfDoc.getPage(i).then(function(page) {
+          const viewport = page.getViewport({ scale: 1.5 });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+
+          return page.render({ canvasContext: context, viewport: viewport }).promise.then(() => {
+            const img = document.createElement('img');
+            img.src = canvas.toDataURL();
+            img.style.width = '100%';
+            img.style.pageBreakAfter = 'always';
+            printArea.appendChild(img);
+          });
+        }));
+      }
+
+      Promise.all(promises).then(() => {
+        window.print();
+      });
     }
   </script>
 </body>
